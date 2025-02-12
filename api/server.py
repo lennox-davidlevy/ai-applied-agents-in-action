@@ -283,6 +283,15 @@ async def agentic_route(query: QueryRequest):
             api_key=apikey,
         )
 
+        retrieval_llm = LLM(
+            model="watsonx/ibm/granite-3-8b-instruct",
+            base_url=url,
+            project_id=project_id,
+            max_tokens=1000,
+            temperature=0.7,
+            api_key=apikey,
+        )
+
         collection_selector_agent = Agent(
             role="Collection Selector",
             goal="Analyze user queries and determine the most relevant ChromaDB collection.",
@@ -312,9 +321,137 @@ async def agentic_route(query: QueryRequest):
             output_json=CategoryResponse,
         )
 
+        @tool("query_collection_tool")
+        def query_collection_tool(category: str, query: str) -> dict:
+            """Tool to query ChromaDB based on category and return relevant documents"""
+
+            credentials = Credentials(
+                url=url,
+                api_key=apikey,
+            )
+
+            embedding_model = Embeddings(
+                model_id="intfloat/multilingual-e5-large",
+                credentials=credentials,
+                project_id=project_id,
+                verify=True,
+            )
+
+            query_embedding = embedding_model.embed_query(query)
+            collection = chroma_client.get_collection(category.lower())
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=5,
+                include=["documents", "metadatas", "distances"],
+            )
+
+            relevant_documents = []
+            for doc, metadata, distance in zip(
+                results["documents"][0],
+                results["metadatas"][0],
+                results["distances"][0],
+            ):
+                similarity = 1 - distance
+                if similarity > 0.8:  # should adjust? maybe?
+                    metadata["collection"] = category.lower()
+                    metadata["relevance_score"] = similarity
+                    relevant_documents.append({"content": doc, "metadata": metadata})
+
+            relevant_documents.sort(
+                key=lambda x: x["metadata"]["relevance_score"], reverse=True
+            )
+            # lets see if 5 is enough
+            relevant_documents = relevant_documents[:5]
+
+            context = ""
+            for doc in relevant_documents:
+                score = doc["metadata"]["relevance_score"]
+                content = doc["content"]
+                context += f"\nRelevance Score: {score:.2f}\n{content}\n---\n"
+
+            return {"category": category, "query": query, "context": context}
+
+        @tool("query_collection_tool")
+        def query_collection_tool(category: str, query: str) -> dict:
+            """Tool to query ChromaDB based on category and return relevant documents"""
+
+            credentials = Credentials(
+                url=url,
+                api_key=apikey,
+            )
+
+            embedding_model = Embeddings(
+                model_id="intfloat/multilingual-e5-large",
+                credentials=credentials,
+                project_id=project_id,
+                verify=True,
+            )
+
+            query_embedding = embedding_model.embed_query(query)
+            collection = chroma_client.get_collection(category.lower())
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=5,
+                include=["documents", "metadatas", "distances"],
+            )
+
+            relevant_documents = []
+            for doc, metadata, distance in zip(
+                results["documents"][0],
+                results["metadatas"][0],
+                results["distances"][0],
+            ):
+                similarity = 1 - distance
+                if similarity > 0.8:  # should adjust? maybe?
+                    metadata["collection"] = category.lower()
+                    metadata["relevance_score"] = similarity
+                    relevant_documents.append({"content": doc, "metadata": metadata})
+
+            relevant_documents.sort(
+                key=lambda x: x["metadata"]["relevance_score"], reverse=True
+            )
+            # lets see if 5 is enough
+            relevant_documents = relevant_documents[:5]
+
+            context = ""
+            for doc in relevant_documents:
+                score = doc["metadata"]["relevance_score"]
+                content = doc["content"]
+                context += f"\nRelevance Score: {score:.2f}\n{content}\n---\n"
+
+            return {"category": category, "query": query, "context": context}
+
+        retriever_agent = Agent(
+            role="Category Retriever",
+            goal="Query ChromaDB with the appropriate category and return results",
+            backstory=(
+                "You are responsible for taking the classified category and original query, "
+                "querying the appropriate ChromaDB collection, and returning the results."
+            ),
+            verbose=True,
+            allow_delegation=False,
+            llm=retrieval_llm,
+            max_iter=3,
+            tools=[query_collection_tool],
+        )
+
+        retriever_task = Task(
+            description=(
+                "Take the category from the categorization task and the original query, "
+                "use them to query the appropriate ChromaDB collection, and return the results. "
+                f"Current query: {query.query}"
+            ),
+            expected_output=(
+                "An object containing the category, query, and context from ChromaDB"
+            ),
+            agent=retriever_agent,
+            context=[categorization_task],
+        )
+
+
         crew = Crew(
-            agents=[collection_selector_agent],
-            tasks=[categorization_task],
+            agents=[collection_selector_agent, retriever_agent],
+            tasks=[categorization_task, retriever_task],
             process=Process.sequential,
             verbose=True
         )
@@ -325,7 +462,7 @@ async def agentic_route(query: QueryRequest):
         crew_result = {
             "json_dict": {
                 "response": "This WILL be generated by our multi agent RAG process",
-                "category": category_result['category'],
+                "category": "Bye for now" 
             }
         }
 
