@@ -82,8 +82,7 @@ def load_prompt_templates():
             with open(file_path, "r") as f:
                 template = f.read()
             template_name = filename[:-4]
-            prompt_templates[template_name] = PromptTemplateRequest(
-                template=template)
+            prompt_templates[template_name] = PromptTemplateRequest(template=template)
 
 
 def load_examples():
@@ -96,8 +95,7 @@ def load_examples():
             with open(file_path, "r") as f:
                 template = f.read()
             template_name = filename[:-4]
-            examples_templates[template_name] = ExamplesTemplate(
-                template=template)
+            examples_templates[template_name] = ExamplesTemplate(template=template)
 
 
 # Initialize FastAPI app with custom lifespan
@@ -157,8 +155,7 @@ async def process_documents_by_collection(files: List[UploadFile] = File(...)):
         project_id = os.environ.get("PROJECT_ID")
         url = os.environ.get("WATSON_URL")
         if not (apikey and project_id and url):
-            raise ValueError(
-                "Missing one or more required environment variables.")
+            raise ValueError("Missing one or more required environment variables.")
 
         credentials = Credentials(
             url=url,
@@ -175,8 +172,7 @@ async def process_documents_by_collection(files: List[UploadFile] = File(...)):
                 content = await upload.read()
                 txt_files.append((upload.filename, content))
             else:
-                print(
-                    f"Skipping file {upload.filename} as it is not a .txt file.")
+                print(f"Skipping file {upload.filename} as it is not a .txt file.")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             for filename, content in txt_files:
@@ -208,7 +204,7 @@ async def process_documents_by_collection(files: List[UploadFile] = File(...)):
 
                 batch_size = 100
                 for i in range(0, len(splits), batch_size):
-                    batch = splits[i: i + batch_size]
+                    batch = splits[i : i + batch_size]
                     texts = [doc.page_content for doc in batch]
                     metadatas = [doc.metadata for doc in batch]
                     embeddings = embedding_model.embed_documents(
@@ -218,8 +214,7 @@ async def process_documents_by_collection(files: List[UploadFile] = File(...)):
                         embeddings=embeddings,
                         documents=texts,
                         metadatas=metadatas,
-                        ids=[f"{file_name}_{i}_{j}" for j in range(
-                            len(batch))],
+                        ids=[f"{file_name}_{i}_{j}" for j in range(len(batch))],
                     )
 
         return {
@@ -235,43 +230,6 @@ class QueryRequest(BaseModel):
         description=(
             "The user's input query that will be processed through a multi-agent pipeline "
             "to generate an intelligent answer."
-        ),
-    )
-
-
-class CategoryResponse(BaseModel):
-    category: str = Field(
-        ...,
-        description=(
-            "The determined category for the query. It must be one of the following values: "
-            "'technical', 'billing', or 'account', which help route the query to the correct domain."
-        ),
-    )
-
-
-class FinalResponse(BaseModel):
-    category: str = Field(
-        ...,
-        description=(
-            "The category assigned to the query by the categorization agent. "
-            "This value is one of 'technical', 'billing', or 'account'."
-        ),
-    )
-    response: str = Field(
-        ...,
-        description=(
-            "The final generated natural language answer. This response is produced after "
-            "retrieving relevant documents and processing them via a dedicated generation agent."
-        ),
-    )
-
-
-class AIQueryAnswerResponse(BaseModel):
-    response: FinalResponse = Field(
-        ...,
-        description=(
-            "The final response object containing both the query category and the generated answer, "
-            "conforming to the multi-agent processing pipeline output."
         ),
     )
 
@@ -302,201 +260,13 @@ async def agentic_route(query: QueryRequest):
       - HTTPException: If an error occurs during processing.
     """
     try:
-        apikey = os.environ.get("IBM_APIKEY")
-        project_id = os.environ.get("PROJECT_ID")
-        url = os.environ.get("WATSON_URL")
 
-        categorization_llm = LLM(
-            model="watsonx/ibm/granite-3-8b-instruct",
-            base_url=url,
-            project_id=project_id,
-            max_tokens=50,
-            temperature=0.7,
-            api_key=apikey,
-        )
-
-        retrieval_llm = LLM(
-            model="watsonx/ibm/granite-3-8b-instruct",
-            base_url=url,
-            project_id=project_id,
-            max_tokens=1000,
-            temperature=0.7,
-            api_key=apikey,
-        )
-
-        generation_llm = LLM(
-            model="watsonx/ibm/granite-3-8b-instruct",
-            # model="watsonx/mistralai/mistral-large",
-            base_url=url,
-            project_id=project_id,
-            max_tokens=3000,
-            temperature=0.7,
-            api_key=apikey,
-        )
-
-        collection_selector_agent = Agent(
-            role="Collection Selector",
-            goal="Analyze user queries and determine the most relevant ChromaDB collection.",
-            backstory="Expert in query classification. Routes questions to the correct domain.",
-            verbose=True,
-            allow_delegation=False,
-            max_iter=3,
-            llm=categorization_llm,
-        )
-
-        categorization_task = Task(
-            description=f"""
-            Based on the user query below, determine the best category.
-            You must return ONLY one of these exact values: "technical", "billing", or "account".
-            
-            Category Definitions:
-            - technical: Issues with system access, errors, API integration
-            - billing: Questions about pricing, payments, invoices
-            - account: User management, roles, organization settings
-            
-            IMPORTANT: Respond with EXACTLY ONE WORD from the list above.
-            
-            User Query: "{query.query}"
-            """,
-            expected_output="A JSON object with a 'category' field that must be either 'technical', 'billing', or 'account'",
-            agent=collection_selector_agent,
-            output_json=CategoryResponse,
-            # may need to use this to ensure correct response
-            # output_pydantic=CategoryResponse
-        )
-
-        @tool("query_collection_tool")
-        def query_collection_tool(category: str, query: str) -> dict:
-            """Tool to query ChromaDB based on category and return relevant documents"""
-
-            credentials = Credentials(
-                url=url,
-                api_key=apikey,
-            )
-
-            embedding_model = Embeddings(
-                model_id="intfloat/multilingual-e5-large",
-                credentials=credentials,
-                project_id=project_id,
-                verify=True,
-            )
-
-            query_embedding = embedding_model.embed_query(query)
-            collection = chroma_client.get_collection(category.lower())
-            results = collection.query(
-                query_embeddings=[query_embedding],
-                n_results=5,
-                include=["documents", "metadatas", "distances"],
-            )
-
-            relevant_documents = []
-            for doc, metadata, distance in zip(
-                results["documents"][0],
-                results["metadatas"][0],
-                results["distances"][0],
-            ):
-                similarity = 1 - distance
-                if similarity > 0.8:  # should adjust? maybe?
-                    metadata["collection"] = category.lower()
-                    metadata["relevance_score"] = similarity
-                    relevant_documents.append(
-                        {"content": doc, "metadata": metadata})
-
-            relevant_documents.sort(
-                key=lambda x: x["metadata"]["relevance_score"], reverse=True
-            )
-            # lets see if 5 is enough
-            relevant_documents = relevant_documents[:5]
-
-            context = ""
-            for doc in relevant_documents:
-                score = doc["metadata"]["relevance_score"]
-                content = doc["content"]
-                context += f"\nRelevance Score: {score:.2f}\n{content}\n---\n"
-
-            return {"category": category, "query": query, "context": context}
-
-        retriever_agent = Agent(
-            role="Category Retriever",
-            goal="Query ChromaDB with the appropriate category and return results",
-            backstory=(
-                "You are responsible for taking the classified category and original query, "
-                "querying the appropriate ChromaDB collection, and returning the results."
-            ),
-            verbose=True,
-            allow_delegation=False,
-            llm=retrieval_llm,
-            max_iter=3,
-            tools=[query_collection_tool],
-        )
-
-        retriever_task = Task(
-            description=(
-                "Take the category from the categorization task and the original query, "
-                "use them to query the appropriate ChromaDB collection, and return the results. "
-                f"Current query: {query.query}"
-            ),
-            expected_output=(
-                "An object containing the category, query, and context from ChromaDB"
-            ),
-            agent=retriever_agent,
-            context=[categorization_task],
-        )
-
-        # make a tool to check if the answer answers the question
-        @tool("generate_response_tool")
-        def generate_response_tool(context: str, query: str) -> dict:
-            """Tool to generate a response using the specific prompt template"""
-            prompt = f"""<|start_of_role|>system<|end_of_role|>
-                        - You are a helpful, respectful, and honest assistant that can summarize long documents.
-                        - Always respond as helpfully as possible, while being safe.
-                        - Your responses should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content.
-                        - Please ensure that your responses are socially unbiased and positive in nature.
-                        - If a document does not make any sense, or is not factually coherent, explain why instead of responding something not correct.
-                        - If you don't know the response to a query, please do not share false information.
-                        <|start_of_role|>user<|end_of_role|>
-                        You are an assistant for question-answering tasks. Generate a conversational response for the given question based on the given set of document context. Think step by step to answer in a crisp manner. Answer should not be more than 300 words. If you do not find any relevant answer in the given documents, please state you do not have an answer. Do not try to generate any information.
-                        Context : {context}
-                        Question : {query}
-                        Answer: <|start_of_role|>assistant<|end_of_role|>"""
-
-            return {"response": prompt}
-
-        generation_agent = Agent(
-            role="Response Generator",
-            goal="Generate a comprehensive response using the specific prompt template",
-            backstory=(
-                "You are an expert at using structured prompts to generate precise, "
-                "informative responses based on provided context."
-            ),
-            verbose=True,
-            allow_delegation=False,
-            llm=generation_llm,
-            max_iter=3,
-            tools=[generate_response_tool],
-        )
-
-        generation_task = Task(
-            description=(
-                "Using the context and query from the retriever task, generate a response using "
-                "the specific prompt template via generate_response_tool. Return the complete response."
-            ),
-            # expected_output="A natural language response following the prompt template structure",
-            expected_output="A JSON object with 'category' and 'response' fields, where 'response' contains the natural language answer",
-            agent=generation_agent,
-            context=[retriever_task],
-            output_json=FinalResponse,
-        )
-
-        crew = Crew(
-            agents=[collection_selector_agent,
-                    retriever_agent, generation_agent],
-            tasks=[categorization_task, retriever_task, generation_task],
-            process=Process.sequential,
-            verbose=True,
-        )
-
-        crew_result = crew.kickoff()
+        crew_result = {
+            "json_dict": {
+                "response": "This WILL be generated by our multi agent RAG process",
+                "category": "something cool",
+            }
+        }
 
         return {"response": crew_result}
 
