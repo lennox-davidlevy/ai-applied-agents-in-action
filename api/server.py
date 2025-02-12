@@ -283,7 +283,7 @@ async def agentic_route(query: QueryRequest):
             api_key=apikey,
         )
 
-        collection_selector_agent = Agent(
+        categorization_agent = Agent(
             role="Collection Selector",
             goal="Analyze user queries and determine the most relevant ChromaDB collection.",
             backstory="Expert in query classification. Routes questions to the correct domain.",
@@ -308,12 +308,12 @@ async def agentic_route(query: QueryRequest):
             User Query: "{query.query}"
             """,
             expected_output="A JSON object with a 'category' field that must be either 'technical', 'billing', or 'account'",
-            agent=collection_selector_agent,
+            agent=categorization_agent,
             output_json=CategoryResponse,
         )
 
         crew = Crew(
-            agents=[collection_selector_agent],
+            agents=[categorization_agent],
             tasks=[categorization_task],
             process=Process.sequential,
             verbose=True
