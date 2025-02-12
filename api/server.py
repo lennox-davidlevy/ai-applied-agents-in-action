@@ -371,56 +371,6 @@ async def agentic_route(query: QueryRequest):
 
             return {"category": category, "query": query, "context": context}
 
-        @tool("query_collection_tool")
-        def query_collection_tool(category: str, query: str) -> dict:
-            """Tool to query ChromaDB based on category and return relevant documents"""
-
-            credentials = Credentials(
-                url=url,
-                api_key=apikey,
-            )
-
-            embedding_model = Embeddings(
-                model_id="intfloat/multilingual-e5-large",
-                credentials=credentials,
-                project_id=project_id,
-                verify=True,
-            )
-
-            query_embedding = embedding_model.embed_query(query)
-            collection = chroma_client.get_collection(category.lower())
-            results = collection.query(
-                query_embeddings=[query_embedding],
-                n_results=5,
-                include=["documents", "metadatas", "distances"],
-            )
-
-            relevant_documents = []
-            for doc, metadata, distance in zip(
-                results["documents"][0],
-                results["metadatas"][0],
-                results["distances"][0],
-            ):
-                similarity = 1 - distance
-                if similarity > 0.8:  # should adjust? maybe?
-                    metadata["collection"] = category.lower()
-                    metadata["relevance_score"] = similarity
-                    relevant_documents.append({"content": doc, "metadata": metadata})
-
-            relevant_documents.sort(
-                key=lambda x: x["metadata"]["relevance_score"], reverse=True
-            )
-            # lets see if 5 is enough
-            relevant_documents = relevant_documents[:5]
-
-            context = ""
-            for doc in relevant_documents:
-                score = doc["metadata"]["relevance_score"]
-                content = doc["content"]
-                context += f"\nRelevance Score: {score:.2f}\n{content}\n---\n"
-
-            return {"category": category, "query": query, "context": context}
-
         retriever_agent = Agent(
             role="Category Retriever",
             goal="Query ChromaDB with the appropriate category and return results",
