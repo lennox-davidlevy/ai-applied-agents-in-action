@@ -283,7 +283,7 @@ async def agentic_route(query: QueryRequest):
             api_key=apikey,
         )
 
-        retrieval_llm = LLM(
+        retriever_llm = LLM(
             model="watsonx/ibm/granite-3-8b-instruct",
             base_url=url,
             project_id=project_id,
@@ -430,7 +430,7 @@ async def agentic_route(query: QueryRequest):
             ),
             verbose=True,
             allow_delegation=False,
-            llm=retrieval_llm,
+            llm=retriever_llm,
             max_iter=3,
             tools=[query_collection_tool],
         )
