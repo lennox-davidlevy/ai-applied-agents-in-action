@@ -11,7 +11,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from ibm_watsonx_ai.foundation_models import Embeddings
 from ibm_watsonx_ai import Credentials
 
-from crewai import Agent, Task, Crew, Process, LLM
 from langchain.tools import tool
 
 from pydantic import BaseModel, Field
