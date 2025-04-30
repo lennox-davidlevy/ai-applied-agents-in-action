@@ -1,224 +1,149 @@
-# AI Applied Demo
+# AI Applied: Agents in Action Tutorial
 
-## Table of Contents
+[![IBM Cloud](https://img.shields.io/badge/IBM%20Cloud-Watsonx.ai-blue)](https://cloud.ibm.com/watsonx)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blueviolet)](https://www.python.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
+[![CrewAI](https://img.shields.io/badge/Framework-CrewAI-orange)](https://www.crewai.com/)
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-teal)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/UI-React-blue)](https://reactjs.org/)
 
-1. [Introduction](#introduction)
-2. [Features](#features)
-3. [Technologies Used](#technologies-used)
-4. [Installation](#installation)
-5. [Usage](#usage)
-6. [File Structure](#file-structure)
-7. [API Overview](#api-overview)
+---
 
 ## Introduction
 
-This application demonstrates how to build a Full-Stack Generative AI system using modern web technologies. It features a React TypeScript frontend built with Carbon Design Systems, a TypeScript Express server for handling UI logic, and a FastAPI Python backend that leverages IBM's watsonx.ai platform for generative AI capabilities. The demo includes a **Pet Naming Suggestion** app, showcasing how you can generate creative names for pets using AI models.
+**Welcome to AI Applied: Agents in Action!**
 
-## Features
+Hi everyone, I'm David Levy, a Solution Architect from IBM. In this tutorial, I'll show you how to seamlessly integrate multiple AI agents into your application using the CrewAI framework. We'll walk through a practical example that covers query categorization, context retrieval from a ChromaDB vector database, and natural language response generation—all orchestrated using a multi-agent approach connected to IBM watsonx.ai.
 
-- **Generative AI Integration**: Leverages watsonx.ai foundation models to generate suggestions based on user inputs.
-- **Modular Design**: A React TypeScript UI with a clean, maintainable code structure.
-- **Real-time Interactions**: A full-stack application with a FastAPI backend communicating with an Express server, all running seamlessly together.
-- **Carbon Design System**: Implements Carbon components for a professional, sleek UI.
-- **Prompt Engineering**: Demonstrates how different prompting techniques (zero-shot, few-shot) can enhance AI model performance.
-  
-## Technologies Used
-
-- **Frontend**:
-  - React (TypeScript)
-  - Carbon Design System (for UI components)
-  - Axios (for HTTP requests)
-  
-- **Backend**:
-  - Express.js (TypeScript) for the UI server
-  - FastAPI (Python) for handling AI API calls
-  - watsonx.ai (for generative AI capabilities)
-     - [watsonx.ai trial accout](https://dataplatform.cloud.ibm.com/registration/stepone?context=wx) 
-  
-- **Development Tools**:
-  - Node.js (v18 or higher)
-  - Python 3.11 or higher
-  - pyenv (for Python environment management)
-
-## Installation
-
-To get the project running locally, follow these steps:
-
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/lennox-davidlevy/ai-applied-code-gen-repeat.git
-   ```
-
-2. Install the root dependencies:
-
-   ```bash
-   npm install
-   ```
-
-3. Run the setup script to install application dependencies and create necessary \`.env\` files:
-
-   ```bash
-   npm run setup
-   ```
-
-4. Ensure that Python dependencies are managed using \`pyenv\`:
-
-   ```bash
-   pyenv virtualenv fs_genai_demo
-   pyenv activate fs_genai_demo
-   ```
-
-5. Copy the `.env.example` file to `.env` in the `api/` directory and there fill in your `project_id` and `iam` credentials for watsonx.ai integration.
-
-   ```bash
-   cp .env.example .env
-   ```
-
-## Usage
-
-1. **Starting the FastAPI Backend**:
-   - Navigate to the `api` folder and run:
-
-     ```bash
-     uvicorn api.server:app --reload
-     ```
-
-   - The API will be available at `http://localhost:8000/docs` for you to test the routes.
-
-2. **Running the Express Server**:
-   - Start the TypeScript Express server by running:
-
-     ```bash
-     npm run dev
-     ```
-
-   - This handles the UI interactions and communicates with the backend.
-
-3. **Starting the React UI**:
-   - To run the React client, navigate to the `client` directory and start the app:
-
-     ```bash
-     npm start
-     ```
-
-4. **Testing the Pet Naming App**:
-   - Open your browser and navigate to the React app. Use the pet naming form to interact with the generative AI backend.
-
-## Project File Structure
-
-This is the overall structure of the AI Applied Demo project, with each directory and file briefly described.
-
-### Top-Level Structure
-
-```bash
-├── README.md                 
-├── api                       # Backend FastAPI implementation
-├── package-lock.json         
-├── package.json             
-└── ui                        # Frontend codebase (React UI and Express server)
-    ├── client                # React frontend code
-    ├── db                    # SQL scripts for managing local databases
-    ├── ocp                   # OpenShift deployment configuration
-    ├── server                # Express server for handling UI logic
-```
-
-### FastAPI Structure
-
-```sh
-├── Dockerfile                
-├── README.md                 
-├── data                      
-│   ├── examples              # Example data for model training
-│   │   ├── generate_summary.txt
-│   │   └── pet_namer.txt
-│   ├── models                # JSON files defining model behavior
-│   │   ├── generate_summary.json
-│   │   └── pet_namer.json
-│   └── prompt_templates      # Prompt templates for LLM interaction
-│       ├── generate_summary.txt
-│       └── pet_namer.txt
-├── requirements.txt          # Python dependencies for the API
-├── routes                    # FastAPI route definitions
-│   └── models.py             # Handles API routes
-├── schemas                   # Pydantic models for request/response validation
-│   ├── __init__.py
-│   ├── examples_template.py
-│   ├── generate_summary_response.py
-│   ├── json_response_template.py
-│   ├── pet_namer_response.py
-│   ├── prompt_template.py
-│   └── test_request.py
-├── server.py                 # Main FastAPI server logic
-└── tests                     # Test files for API functionality
-    ├── conftest.py           # Pytest fixtures and setup
-    ├── test_generate_text.py # Unit test for text generation functionality
-    └── test_startup.py       # Unit test for server startup
-```
-
-
-### Top-Level UI Structure 
-```sh
-├── client                    # React code for the frontend
-│   ├── public                # Public assets for React app
-│   ├── src                   # Source code for the React app
-│   ├── tsconfig.json         # TypeScript configuration
-│   └── webpack.config.js     # Webpack configuration for bundling the React app
-├── db                        # SQL files for local database
-├── ocp                       # OpenShift deployment configuration files
-├── server                    # Express server handling UI logic
-```
-
-### React UI File Structure
-```sh
-├── package.json              # React frontend dependencies
-├── public                    # Public directory for React
-│   ├── favicon.ico
-│   └── index.html
-├── src                       # Source code for the React application
-│   ├── App.scss              # Styles for the app
-│   ├── App.tsx               # Main app component
-│   ├── components            # Reusable React components
-│   │   ├── Header            # Header component
-│   │   ├── Landing           # Landing page component
-│   │   └── PetForm           # Pet form component for user input
-│   ├── context               # Global context for the app
-│   │   └── AppContext.tsx    # Context file for managing global state
-│   ├── index.scss            # Global styles
-│   └── index.tsx             # Main entry point for the React app
-├── tsconfig.json             # TypeScript configuration
-└── webpack.config.js         # Webpack configuration
-```
-
-### Express Server File Structure
-```sh
-├── package.json              # Express server dependencies
-├── src                       # Source code for the Express server
-│   ├── db                    # Database configuration
-│   │   └── dbConfig.ts       # Configuration for database connections
-│   ├── index.ts              # Entry point for the Express server
-│   └── routes                # API routes for Express server
-│       ├── configRoutes.ts   # Config routes for Express server
-│       ├── dbRoutes.ts       # Database routes for managing data
-│       ├── index.ts          # Route index
-│       └── petNamerRoutes.ts # Route for handling pet namer API
-└── tsconfig.json             # TypeScript configuration for the Express server
-```
-
-## API Overview
-
-### Routes
-
-- **`/generate_summary`**: Generates a summary based on AI models and provided examples. Uses `api/data/models/generate_summary.json` and `api/data/prompt_templates/generate_summary.txt`.
-
-- **`/pet_namer`**: Generates creative pet names using examples from `api/data/examples/generate_summary.txt` and a prompt template.
-
-### Frontend to Backend Workflow
-
-1. **React UI**: User selects a pet type and submits a form.
-2. **Express Server**: The Express server processes the request and forwards it to the FastAPI backend.
-3. **FastAPI Backend**: FastAPI calls the watsonx.ai API and returns a generated name.
-4. **React UI**: The name is displayed to the user.
+This session is designed to give you a clear, step-by-step guide on setting up the project and building the agentic pipeline. Let's dive in and explore how you can leverage these tools to build smarter applications!
 
 ---
+
+## Table of Contents
+
+1.  [Prerequisites](#prerequisites)
+2.  [Repository Setup](#repository-setup)
+3.  [UI Setup](#ui-setup)
+4.  [API Setup](#api-setup)
+5.  [Application Initialization](#application-initialization)
+6.  [Tutorial Steps](#tutorial-steps)
+    *   [Step 1: Categorization Agent (`01_Step`)](#step-1-categorization-agent-01_step)
+    *   [Step 2: Retriever Agent (`02_Step`)](#step-2-retriever-agent-02_step)
+    *   [Step 3: Generation Agent (`03_Step`)](#step-3-generation-agent-03_step)
+7.  [Key Technologies](#key-technologies)
+8.  [Conclusion and Next Steps](#conclusion-and-next-steps)
+
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+*   **Git:** For cloning the repository.
+*   **Node.js and npm:** (v18 or later recommended) For the UI setup.
+*   **Python:** (v3.9 or later recommended) For the API setup.
+*   **pyenv (Optional but Recommended):** For managing Python virtual environments.
+*   **Access to IBM watsonx.ai:** You will need:
+    *   An IBM Cloud Account.
+    *   A watsonx.ai Project ID.
+    *   An IBM Cloud API Key.
+    *   The URL endpoint for your watsonx.ai instance.
+
+---
+
+## Repository Setup
+
+First, clone the tutorial repository from GitHub to your local machine.
+
+```bash
+git clone https://github.com/lennox-davidlevy/ai-applied-agents-in-action.git
+cd ai-applied-agents-in-action
+```
+---
+
+## UI Setup
+
+The user interface is built with React, TypeScript, and uses the Carbon Design System. We won't modify the UI in this tutorial, but here's how to set it up:
+
+1. Navigate to the UI Directory
+```bash
+cd ui
+```
+2. Install root dependencies
+```bash
+npm i
+npm run setup
+```
+3. Set up environment variables: copy the example environment file to create your local configuration
+```bash
+cp client/.env.example client/.env
+cp server/.env.example server/.env
+```
+*Note: You may need to configure variables insde this .env file later depending on your specific setup, but for this tutoral, the defaults are ok.* 
+
+---
+
+
+## API Setup
+The backend API is built using Python and FastAPI.
+
+1. Navigate to the API Directory
+```bash
+# From root
+cd api
+```
+2. Create and activate a Python virtual environment: (I used pyenv virtualenv, but there are many ways to do this)
+```bash
+pyenv virtualenv 3.12 aiagentic 
+pyenv activate aiagentic
+```
+3. Install Python dependencies
+```sh
+pip install -r requirements.txt
+```
+4. Set up environment variables
+```sh
+cp .env.example .env
+```
+5. Configure API Credentials
+```bash
+# .env (in api directory)
+IBM_APIKEY="your_ibm_cloud_api_key"
+PROJECT_ID="your_watsonx_ai_project_id"
+WATSON_URL="your_watsonx_ai_instance_url"
+```
+
+## Application Initialization
+Before running the main application, we need to populate the ChromaDB vector database with sample documents. The tutorial uses different branches to represent stages of development.
+
+1. Checkout the first step's branch:
+```
+git checkout 01_Step
+```
+2. Populate the ChromaDB Database: Run the processing script from the **root** directory.
+```sh
+cd api/
+# Run the script (ensure your 'aiagentic' virtual environment is active)
+# Make sure you are in the /api directory
+python scripts/process_documents.py
+```
+*Explanation*: The `process_documents.py` script reads files from the `api/docs` directory, chunks them, generates embeddings using a model form `watsonx.ai` and stores them in ChromaDB as their own collections based on the file names (e.g. `billing.txt` goes to `billing` collection).
+
+3. **Start the services**
+- **API Server**: Navigate to the `api` directory and star the FastAPI server (ensure your virtual environment is active)
+    ```sh
+    cd api
+    uvicorn main:app --reload --port 8000
+    ```
+- **UI**  
+    ```sh
+    cd ../ui
+    npm run dev
+    ```
+You should now be able to access the initial UI in your browser at `http://localhost:3000` and if you want to see the API's swagger docs `http://localhost:8000/docs`
+
+
+
+
+
 
