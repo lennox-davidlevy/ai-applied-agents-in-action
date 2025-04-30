@@ -37,7 +37,7 @@ Before you begin, ensure you have the following installed:
 
 *   **Git:** For cloning the repository.
 *   **Node.js and npm:** (v18 or later recommended) For the UI setup.
-*   **Python:** (v3.12 or later recommended) For the API setup.
+*   **Python:** (v3.12.10 or later) For the API setup.
 *   **pyenv (Optional but Recommended):** For managing Python virtual environments.
 *   **Access to IBM watsonx.ai:** You will need:
     *   An IBM Cloud Account.
@@ -90,7 +90,7 @@ cd api
 ```
 2. Create and activate a Python virtual environment: (I used pyenv virtualenv, but there are many ways to do this)
 ```bash
-pyenv virtualenv 3.12 aiagentic 
+pyenv virtualenv 3.12.10 aiagentic 
 pyenv activate aiagentic
 ```
 3. Install Python dependencies
