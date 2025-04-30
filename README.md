@@ -37,7 +37,7 @@ Before you begin, ensure you have the following installed:
 
 *   **Git:** For cloning the repository.
 *   **Node.js and npm:** (v18 or later recommended) For the UI setup.
-*   **Python:** (v3.9 or later recommended) For the API setup.
+*   **Python:** (v3.12 or later recommended) For the API setup.
 *   **pyenv (Optional but Recommended):** For managing Python virtual environments.
 *   **Access to IBM watsonx.ai:** You will need:
     *   An IBM Cloud Account.
