@@ -94,8 +94,11 @@ pyenv virtualenv 3.12 aiagentic
 pyenv activate aiagentic
 ```
 3. Install Python dependencies
+
+***Important: use the following command due to dependency issues that are in process of being resolved*** 
+
 ```sh
-pip install -r requirements.txt
+pip install --use-deprecated=legacy-resolver -r requirements.txt
 ```
 4. Set up environment variables
 ```sh
@@ -129,7 +132,7 @@ python scripts/process_documents.py
 - **API Server**: Navigate to the `api` directory and star the FastAPI server (ensure your virtual environment is active)
     ```sh
     cd api
-    uvicorn main:app --reload --port 8000
+    uvicorn server:app --reload
     ```
 - **UI**  
     ```sh
