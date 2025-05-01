@@ -26,8 +26,12 @@ This session is designed to give you a clear, step by step guide on setting up t
 3.  [UI Setup](#ui-setup)
 4.  [API Setup](#api-setup)
 5.  [Application Initialization](#application-initialization)
-6.  [Key Technologies](#key-technologies)
-7.  [Conclusion and Next Steps](#conclusion-and-next-steps)
+6.  [Tutorial Steps](#tutorial-steps)
+    *   [Step 1: Categorization Agent (`01_Step`)](#step-1-categorization-agent-01_step)
+    *   [Step 2: Retriever Agent (`02_Step`)](#step-2-retriever-agent-02_step)
+    *   [Step 3: Generation Agent (`03_Step`)](#step-3-generation-agent-03_step)
+7.  [Key Technologies](#key-technologies)
+8.  [Conclusion and Next Steps](#conclusion-and-next-steps)
 
 ---
 
@@ -141,6 +145,444 @@ python scripts/process_documents.py
     ```
 You should now be able to access the initial UI in your browser at `http://localhost:3000` and if you want to see the API's swagger docs `http://localhost:8000/docs`
 
+---
+
+## Tutorial Steps
+
+Lets build the mutli agent pipeline step by step!
+
+### Step 1: Categorization Agent (01_Step)
+
+**Goal:** Create the first agent responsible for categorizing the user's query into "technical", "billing", or "account".
+
+**Branch:** Ensure you are on the `01_Step` branch.
+```sh
+git checkout 01_step
+```
+
+**Code Overview (`api/server.py` in `01_step`)** 
+
+This step introduces the basic FastAPI route (`/agentic-route`) and the first CrewAI agent
+
+```python
+class CategoryResponse(BaseModel):
+    category: str = Field(
+        ...,
+        description=(
+            "The determined category for the query. It must be one of the following values: "
+            "'technical', 'billing', or 'account', which help route the query to the correct domain."
+        )
+    )
+
+@app.post("/agentic-route")
+async def agentic_route(query: QueryRequest):
+    """
+    Process a user query through a multi-agent pipeline to generate an intelligent answer.
+
+    This endpoint orchestrates a three-step process:
+      1. **Query Categorization**: An LLM-powered agent determines the query category from
+         a fixed set ("technical", "billing", or "account").
+      2. **Context Retrieval**: Based on the determined category, the system queries the
+         corresponding ChromaDB collection using an embedding model to extract relevant documents.
+      3. **Response Generation**: A dedicated agent generates a detailed answer using a structured
+         prompt that incorporates the query and the retrieved document context.
+
+    **Return Structure**:
+      The response is a JSON object conforming to the `AIQueryAnswerResponse` model:
+        {
+            "response": {
+                "category": <str>,  # one of "technical", "billing", or "account"
+                "response": <str>   # the generated natural language answer
+            }
+        }
+
+    **Raises**:
+      - HTTPException: If an error occurs during processing.
+    """
+    try:
+        apikey = os.environ.get("IBM_APIKEY")
+        project_id = os.environ.get("PROJECT_ID")
+        url = os.environ.get("WATSON_URL")
+
+        categorization_llm = LLM(
+            model="watsonx/ibm/granite-3-8b-instruct",
+            base_url=url,
+            project_id=project_id,
+            max_tokens=50,
+            temperature=0.7,
+            api_key=apikey,
+        )
+
+        categorization_agent = Agent(
+            role="Collection Selector",
+            goal="Analyze user queries and determine the most relevant ChromaDB collection.",
+            backstory="Expert in query classification. Routes questions to the correct domain.",
+            verbose=True,
+            allow_delegation=False,
+            max_iter=3,
+            llm=categorization_llm,
+        )
+
+        categorization_task = Task(
+            description=f"""
+            Based on the user query below, determine the best category.
+            You must return ONLY one of these exact values: "technical", "billing", or "account".
+            
+            Category Definitions:
+            - technical: Issues with system access, errors, API integration
+            - billing: Questions about pricing, payments, invoices
+            - account: User management, roles, organization settings
+            
+            IMPORTANT: Respond with EXACTLY ONE WORD from the list above.
+            
+            User Query: "{query.query}"
+            """,
+            expected_output="A JSON object with a 'category' field that must be either 'technical', 'billing', or 'account'",
+            agent=categorization_agent,
+            output_json=CategoryResponse,
+        )
+
+        crew = Crew(
+            agents=[categorization_agent],
+            tasks=[categorization_task],
+            process=Process.sequential,
+            verbose=True
+        )
+
+        category_result = crew.kickoff()
+
+        print(category_result)
+        crew_result = {
+            "json_dict": {
+                "response": "This WILL be generated by our multi agent RAG process",
+                "category": category_result['category'],
+            }
+        }
+
+        return {"response": crew_result}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+**Explanation:** 
+
+- **LLM Configuration**: Sets up the connection to watsonx.ai for the categorization model.
+- **Agent Definition**: Defines the categorization_agent with its specific role, goal, and backstory. It's instructed to use the configured LLM.
+- **Task Definition**: Defines categorization_task, providing the agent with instructions (the prompt) and the expected output format (CategoryResponse Pydantic model).
+- **Crew**: Initializes the Crew with the single agent and task, set to run sequentially.
+- **Kickoff**: crew.kickoff() executes the workflow. Since output_json is specified in the task, CrewAI attempts to parse the LLM's output into the CategoryResponse model.
+- **Response**: The endpoint currently returns the determined category and a placeholder response string.
+
+### Step 2: Retriever Agent (02_Step)
+
+**Goal**: Add a second agent that uses the category from Step 1 to retrieve relevant documents from the corresponding ChromaDB collection.
+
+**Branch**: Check out the `02_Step` branch.
+```sh
+git checkout 02_step
+```
+
+**Code Overview (`api/server.py` in `02_Step`)**:
+
+This step builds upon the previous one by adding a ChromaDB querying tool and a new agent/task for retrieval.
+
+```python
+@app.post("/agentic-route")
+async def agentic_route(query: QueryRequest):
+    """
+    Process a user query through a multi-agent pipeline to generate an intelligent answer.
+
+    This endpoint orchestrates a three-step process:
+      1. **Query Categorization**: An LLM-powered agent determines the query category from
+         a fixed set ("technical", "billing", or "account").
+      2. **Context Retrieval**: Based on the determined category, the system queries the
+         corresponding ChromaDB collection using an embedding model to extract relevant documents.
+      3. **Response Generation**: A dedicated agent generates a detailed answer using a structured
+         prompt that incorporates the query and the retrieved document context.
+
+    **Return Structure**:
+      The response is a JSON object conforming to the `AIQueryAnswerResponse` model:
+        {
+            "response": {
+                "category": <str>,  # one of "technical", "billing", or "account"
+                "response": <str>   # the generated natural language answer
+            }
+        }
+
+    **Raises**:
+      - HTTPException: If an error occurs during processing.
+    """
+    try:
+        apikey = os.environ.get("IBM_APIKEY")
+        project_id = os.environ.get("PROJECT_ID")
+        url = os.environ.get("WATSON_URL")
+
+        retriever_llm = LLM(
+            model="watsonx/ibm/granite-3-8b-instruct",
+            base_url=url,
+            project_id=project_id,
+            max_tokens=1000,
+            temperature=0.7,
+            api_key=apikey,
+        )
+
+        @tool("query_collection_tool")
+        def query_collection_tool(category: str, query: str) -> dict:
+            """Tool to query ChromaDB based on category and return relevant documents"""
+
+            credentials = Credentials(
+                url=url,
+                api_key=apikey,
+            )
+
+            embedding_model = Embeddings(
+                model_id="intfloat/multilingual-e5-large",
+                credentials=credentials,
+                project_id=project_id,
+                verify=True,
+            )
+
+            query_embedding = embedding_model.embed_query(query)
+            collection = chroma_client.get_collection(category.lower())
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=5,
+                include=["documents", "metadatas", "distances"],
+            )
+
+            relevant_documents = []
+            for doc, metadata, distance in zip(
+                results["documents"][0],
+                results["metadatas"][0],
+                results["distances"][0],
+            ):
+                similarity = 1 - distance
+                if similarity > 0.8:  # should adjust? maybe?
+                    metadata["collection"] = category.lower()
+                    metadata["relevance_score"] = similarity
+                    relevant_documents.append({"content": doc, "metadata": metadata})
+
+            relevant_documents.sort(
+                key=lambda x: x["metadata"]["relevance_score"], reverse=True
+            )
+            # lets see if 5 is enough
+            relevant_documents = relevant_documents[:5]
+
+            context = ""
+            for doc in relevant_documents:
+                score = doc["metadata"]["relevance_score"]
+                content = doc["content"]
+                context += f"\nRelevance Score: {score:.2f}\n{content}\n---\n"
+
+            return {"category": category, "query": query, "context": context}
+
+        retriever_agent = Agent(
+            role="Category Retriever",
+            goal="Query ChromaDB with the appropriate category and return results",
+            backstory=(
+                "You are responsible for taking the classified category and original query, "
+                "querying the appropriate ChromaDB collection, and returning the results."
+            ),
+            verbose=True,
+            allow_delegation=False,
+            llm=retriever_llm,
+            max_iter=3,
+            tools=[query_collection_tool],
+        )
+
+        retriever_task = Task(
+            description=(
+                "Take the category from the categorization task and the original query, "
+                "use them to query the appropriate ChromaDB collection, and return the results. "
+                f"Current query: {query.query}"
+            ),
+            expected_output=(
+                "An object containing the category, query, and context from ChromaDB"
+            ),
+            agent=retriever_agent,
+            context=[categorization_task],
+        )
+
+
+        crew = Crew(
+            agents=[categorization_agent, retriever_agent],
+            tasks=[categorization_task, retriever_task],
+            process=Process.sequential,
+            verbose=True
+        )
+
+        category_result = crew.kickoff()
+
+        print(category_result)
+        crew_result = {
+            "json_dict": {
+                "response": "This WILL be generated by our multi agent RAG process",
+                "category": "Bye for now" 
+            }
+        }
+
+        return {"response": crew_result}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+**Explanation**:
+
+- **ChromaDB Client**: Initializes connection to the vector database.
+- **@tool Decorator**: The query_collection_tool function is decorated with @tool from crewai_tools, making it available for agents to use.
+- **Tool Logic**: The tool function takes the category and query, generates an embedding for the query using WatsonxEmbeddings, queries the appropriate ChromaDB collection, filters results based on similarity, formats the documents into a context string, and returns a dictionary.
+- **Retriever Agent**: A new retriever_agent is defined. Crucially, it's given tools=[query_collection_tool]. Its goal is specifically to use this tool.
+- **Retriever Task**: The retriever_task instructs the agent to use the tool. It specifies context=[categorization_task], meaning it will receive the output from the first task (the CategoryResponse object or dictionary). The agent needs to extract the category string from this context to pass to the tool.
+- **Updated Crew**: The Crew now includes both agents and tasks in sequential order.
+- **Result**: crew.kickoff() now returns the output of the retriever_task, which should be the dictionary containing the context fetched by the query_collection_tool.
+
+
+### Step 3: Generation Agent (`03_step`)
+
+**Goal**: Add the final agent responsible for synthesizing a natural language answer using the original query and the context retrieved in Step 2.
+
+**Branch**: Check out the `03_step` branch.
+```sh
+git checkout 03_step
+```
+
+**Code Overview (`api/server.py` in `03_step`)**
+
+This step adds the generation agent, its task, and updates the final response structure.
+
+```python
+class FinalResponse(BaseModel):
+    category: str = Field(
+        ...,
+        description=(
+            "The category assigned to the query by the categorization agent. "
+            "This value is one of 'technical', 'billing', or 'account'."
+        ),
+    )
+    response: str = Field(
+        ...,
+        description=(
+            "The final generated natural language answer. This response is produced after "
+            "retrieving relevant documents and processing them via a dedicated generation agent."
+        ),
+    )
+
+@app.post("/agentic-route")
+async def agentic_route(query: QueryRequest):
+    """
+    Process a user query through a multi-agent pipeline to generate an intelligent answer.
+
+    This endpoint orchestrates a three-step process:
+      1. **Query Categorization**: An LLM-powered agent determines the query category from
+         a fixed set ("technical", "billing", or "account").
+      2. **Context Retrieval**: Based on the determined category, the system queries the
+         corresponding ChromaDB collection using an embedding model to extract relevant documents.
+      3. **Response Generation**: A dedicated agent generates a detailed answer using a structured
+         prompt that incorporates the query and the retrieved document context.
+
+    **Return Structure**:
+      The response is a JSON object conforming to the `AIQueryAnswerResponse` model:
+        {
+            "response": {
+                "category": <str>,  # one of "technical", "billing", or "account"
+                "response": <str>   # the generated natural language answer
+            }
+        }
+
+    **Raises**:
+      - HTTPException: If an error occurs during processing.
+    """
+    try:
+        apikey = os.environ.get("IBM_APIKEY")
+        project_id = os.environ.get("PROJECT_ID")
+        url = os.environ.get("WATSON_URL")
+
+        generation_llm = LLM(
+            model="watsonx/ibm/granite-3-8b-instruct",
+            # model="watsonx/mistralai/mistral-large",
+            base_url=url,
+            project_id=project_id,
+            max_tokens=3000,
+            temperature=0.7,
+            api_key=apikey,
+        )
+
+        @tool("generate_response_tool")
+        def generate_response_tool(context: str, query: str) -> dict:
+            """Tool to generate a response using the specific prompt template"""
+            prompt = f"""<|start_of_role|>system<|end_of_role|>
+                        - You are a helpful, respectful, and honest assistant that can summarize long documents.
+                        - Always respond as helpfully as possible, while being safe.
+                        - Your responses should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content.
+                        - Please ensure that your responses are socially unbiased and positive in nature.
+                        - If a document does not make any sense, or is not factually coherent, explain why instead of responding something not correct.
+                        - If you don't know the response to a query, please do not share false information.
+                        <|start_of_role|>user<|end_of_role|>
+                        You are an assistant for question-answering tasks. Generate a conversational response for the given question based on the given set of document context. Think step by step to answer in a crisp manner. Answer should not be more than 300 words. If you do not find any relevant answer in the given documents, please state you do not have an answer. Do not try to generate any information.
+                        Context : {context}
+                        Question : {query}
+                        Answer: <|start_of_role|>assistant<|end_of_role|>"""
+
+            return {"response": prompt}
+
+        generation_agent = Agent(
+            role="Response Generator",
+            goal="Generate a comprehensive response using the specific prompt template",
+            backstory=(
+                "You are an expert at using structured prompts to generate precise, "
+                "informative responses based on provided context."
+            ),
+            verbose=True,
+            allow_delegation=False,
+            llm=generation_llm,
+            max_iter=3,
+            tools=[generate_response_tool],
+        )
+
+        generation_task = Task(
+            description=(
+                "Using the context and query from the retriever task, generate a response using "
+                "the specific prompt template via generate_response_tool. Return the complete response."
+            ),
+            expected_output="A JSON object with 'category' and 'response' fields, where 'response' contains the natural language answer",
+            agent=generation_agent,
+            context=[retriever_task],
+            output_json=FinalResponse,
+        )
+
+        crew = Crew(
+            agents=[categorization_agent,
+                    retriever_agent, generation_agent],
+            tasks=[categorization_task, retriever_task, generation_task],
+            process=Process.sequential,
+            verbose=True,
+        )
+
+        crew_result = crew.kickoff()
+
+        return {"response": crew_result}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+**Explanation**:
+
+- **FinalResponse Model**: A Pydantic model `FinalResponse` is defined to structure the final output JSON, containing both the category and the generated `response`.
+- **Generation LLM**: A potentially distinct LLM instance (`generation_llm`) is configured, possibly with more max_tokens to accommodate longer answers.
+- **Generation Agent**: The generation_agent is defined with the goal of synthesizing the final answer using its assigned `generation_llm`.
+- **Generation Task**:
+    - The `generation_task` takes the output (context dictionary) from the `retriever_task`.
+    - Its description now includes the full prompt template. The `{context}` and `{query}` placeholders will be filled by CrewAI using the data received from the `retriever_task`.
+    - Crucially, `output_json=FinalResponse` is set. This tells CrewAI to:
+        - Append instructions to the prompt asking the LLM to generate a JSON object matching the `FinalResponse` schema.
+        - Parse the LLM's response string into a `FinalResponse` Pydantic object.
+- **Final Crew**: The Crew includes all three agents and tasks in sequence.
+- **Final Result**: `crew.kickoff()` executes the entire pipeline. The return value should be the `FinalResponse` object generated by the last task. This object is then returned by the API endpoint.
+
+
 ## Key Technologies
 
 - **CrewAI**: Framework for orchestrating autonomous AI agents.
@@ -178,3 +620,6 @@ Awesome! We've built a sophisticated multi-agent pipeline using CrewAI and watso
 - **Customize**: Modify the UI or refactor the backend code.
 
 Dive into the code, experiment, and build something cool! Thanks for following along!
+
+---
+
